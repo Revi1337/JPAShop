@@ -11,7 +11,7 @@ public class MemberRepository {
     @PersistenceContext // 스프링컨테이너 위에서 동작하기 때문에  @PersistenceContext 가 있으면 EntityManger 를 주입해줌. (따로 EntityMangerFactory 를 통해 Manger 를 만들 필요가 없음.)
     private EntityManager em;
 
-    public Long save(Member member) {
+        public Long save(Member member) {
         em.persist(member);
         return member.getId();
     }
