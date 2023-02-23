@@ -2,7 +2,6 @@ package jpabook.jpashop;
 
 import jpabook.jpashop.domain.Address;
 import jpabook.jpashop.domain.Member;
-import jpabook.jpashop.repository.MemberRepository;
 import jpabook.jpashop.service.MemberService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
