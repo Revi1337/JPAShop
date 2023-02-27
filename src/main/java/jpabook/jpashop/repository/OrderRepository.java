@@ -4,15 +4,16 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.*;
 import jpabook.jpashop.domain.Order;
+import jpabook.jpashop.repository.order.simplequery.OrderSimpleQueryDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
-import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
 
-@Repository @RequiredArgsConstructor
+@Repository
+@RequiredArgsConstructor
 public class OrderRepository {
 
     private final EntityManager em;
@@ -30,8 +31,8 @@ public class OrderRepository {
         boolean isFirstCondition = true;
 
         // 주문 상태 검색
-        if (orderSearch.getOrderStatus() != null){
-            if(isFirstCondition) {
+        if (orderSearch.getOrderStatus() != null) {
+            if (isFirstCondition) {
                 jpql += " where";
                 isFirstCondition = false;
             } else {
