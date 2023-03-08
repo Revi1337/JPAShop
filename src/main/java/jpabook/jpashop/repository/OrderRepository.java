@@ -96,6 +96,7 @@ public class OrderRepository {
         ).getResultList();
     }
 
+    // Collection v3
     public List<Order> findAllWithItem() {
         // JPA 에서 distinct 는 두가지 기능을 함.
         // 1. from 뒤의 첫번째 Entity (여기서는 Order) 가 중복인 경우, Entity 의 중복(pk 로 판단)을 제거해서 컬렉션을 담아줌.
@@ -107,10 +108,21 @@ public class OrderRepository {
         // TODO 컬렉션(1:N) fetch join 은 1개만 사용 가능함. 컬렉션 둘 이상에 fetch join 을 사용하면 안됨. --> 데이터가 부정함하게 조회될 수 있음
         return em.createQuery(
                 "select distinct o from Order o" + // hibernate 6.0 이상부터는 distinct 쓰지 않아도 됨.
-                " inner join fetch o.member m" +
-                " inner join fetch o.delivery d" +
-                " inner join fetch o.orderItems oi" +
-                " inner join fetch oi.item i" , Order.class
+                        " inner join fetch o.member m" +
+                        " inner join fetch o.delivery d" +
+                        " inner join fetch o.orderItems oi" +
+                        " inner join fetch oi.item i", Order.class
         ).setFirstResult(0).setMaxResults(100).getResultList();
+    }
+
+    // Collection v3.1
+    public List<Order> findAllWithMemberDelivery(int offset, int limit) {
+        return em.createQuery(
+                        "select o from Order o" +
+                                " join fetch o.member m" +
+                                " join fetch o.delivery d", Order.class)
+                .setFirstResult(offset)
+                .setMaxResults(limit)
+                .getResultList();
     }
 }

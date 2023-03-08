@@ -9,6 +9,7 @@ import jpabook.jpashop.repository.OrderSearch;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -77,6 +78,32 @@ public class OrderApiController {
             System.out.println("order ref = " + order + " id=" + order.getId());
         }
 
+        List<OrderDto> result = orders.stream()
+                .map(order -> new OrderDto(order))
+                .collect(Collectors.toList());
+        return result;
+    }
+
+    /**
+     * 주문 조회 V3.1: 엔티티를 DTO 로 변환 - 페이징과 한계 돌파 (v3 단점 극복) --> 페이징 + 컬렉션 엔티티를 코드도 단순하고, 성능 최적화도 보장하는 강력한 방법임.
+     * 1. @~ToOne 엔티티들을 모두 fetch join 으로한번에 갖고온다. (@~ToOne 관계 이어지는 Entity 들은 모두 fetch join 으로 갖고와도 됨) --> @~ToOne 시리즈 애들은 결국에 쿼리의 결과가 1 개 이기때문에, join 시켜도 row 수를 증가시키지않고, column 만 늘어나서 페이징 쿼리에 영향을 주지 않음.
+     *      EX) Order 엔티티와 @~ToOne 관계인 Delivery 를 fetch join 으로 갖고왔는데, Delivery 엔티티와 연관된 다른 엔티티도 @~ToOne 관계면 fetch join 을 계속 이어나갈 수 있다는 의미
+     * 2. @~ToMany (컬렉션) 시리지들은 지연 로딩으로 조회한다. --> 지연 로딩 성능 최적화를 위해 hibernate.default_batch_fetch_size, @BatchSize 를 적용한다.
+     *      orders 와 관련된 애들을 order_item 에서 IN 쿼리하나로 가져옴 (default_batch_fetch_size 의 값으로는 IN 쿼리의 값을 몇개로 지정할것이냐는 뜻임.)
+     *      -> 모든 엔티티에 글로벌하게 적용할때 properties 파일에 설정하고, 세밀하게 특정 Collection 에만 적용할때는 해당 컬렉션에 @BatchSize(size=100) 를 붙여주면된다.
+     *         그리고 컬렉션이 아닌 경우에 적용하고싶으면 해당엔티티클래스에 @BatchSize(size=100) 을 걸어주어야한다.
+     *         BatchSize 의 사이즈는 1000 개가 MAX 이고, 100~1000 을 권장함.
+     * 결론 - @~ToOne 관계는 fetch join 해도 페이징에 영향을 주지 않는다. 따라서 @~ToOne 관계는 fetch join 으로 쿼리수를 줄여 최적화시키고
+     *     - @~ToMany 관계는 `hibernate.default_batch_fetch_size` 로 최적화하자
+     */
+    @GetMapping(value = "/api/v3.1/orders")
+    public List<OrderDto> ordersV3_page(
+            @RequestParam(name = "offset", defaultValue = "0") int offset,
+            @RequestParam(name = "limit", defaultValue = "100") int limit) {
+        // 1. Order 입장에서 ~ToOne 시리즈(Member 랑 Delivery 임) 들을 댕겨오는 과정 (페이징에 영향 X)--> 하지만, 여기서 N + 1 문제가 터져짐. (OrderDto 에서 지연로딩 설정된 OrderItems 을 프로시 초기화하면서 가져오기 때문)
+        // 2. Orders 테이블의 .order_id 와 연관된 애들을 order_item 테이블에서 IN 쿼리로 한방에 가져옴.
+        List<Order> orders = orderRepository.findAllWithMemberDelivery(offset, limit);
+        // 3. order_item 테이블의 item_id 와 관련된 애들도 item 테이블에서 IN 쿼리로 한방에 가져옴.
         List<OrderDto> result = orders.stream()
                 .map(order -> new OrderDto(order))
                 .collect(Collectors.toList());
