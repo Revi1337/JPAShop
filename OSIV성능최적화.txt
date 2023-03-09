@@ -1,0 +1,38 @@
+// OSIV 성능 최적화 (Open Session In View)
+- 역할 : Transaction 이 끝나도 Persistence Context 를 끝까지 살려두는 기능.
+- Hibernate : Open Session In View
+- JPA : Open EntityManger In View (관례상  OSIV 라고 함.)
+
+// JPA 가 언제 DB 커넥션을 가져오고 DB 커넥션을 언제 반납할까?
+**** 영속성 컨텍스트와 DB 커넥션은 굉장히 밀접한 관계임. 왜?? --> 영속성컨텍스트가 동작을하려면 --> DB 커넥션을 내부적으로 사용 --> 그래야 LazyLoading 을 하든 할수있음.
+--> 그럼 언제 JPA 가 DB 커넥션을 획득할까? --> 디테일하게 들어가면 다룰수있긴한데, Transaction 을 시작할때 DB 커넥션을 갖고옴. (Service 나 Respository 계층에서 @Transactional 이 시작될때 DB 커넥션을 갖고온다는 말.)
+--> 그럼 언제 DB 커넥션을 반납할까? --> 이 시점이 굉장히 중요한데, 이 시점은 OSIV 가 false 이냐 true 이냐에 따라 달라짐.
+    1. OSIV True 인 경우 :
+        **** OSIV 가 켜져있으면 유저에게 response 가 나가야 DB 커넥션을 반납함. (디폴트 값은 True 임)
+        --> 이뜻은 고객의 요청이 들어와서 완전히 다 빠져나갈때까지 DB 커넥션을 갖고있다가 요청이 다 빠져나가야 DB 커넥션을 반납하고 Persistence Context 도 사라지는 것임.
+        --> 지금까지 api 패키지의 Controller 단에서 지연로딩인 Proxy 객체를 초기화시킬수 있었던 것도 OSIV 가 켜져있어
+            Transaction 이 끝나도 DB 커넥션과 Persistence Context 가 살아있기때문에 가능한 것임.
+        중간결론 : 지연 로딩은 Persistence Context 가 살아있어야 가능하고, Persistence Context 는 기본적으로 DB 커넥션을 유지한다. (이것 자체가 큰 장점임.)
+            --> 하지만 이 전략은 너무 오랜시간동안 DB 커넥션 리소스를 사용하기 때문에, 실시간 트래픽이 중요한 애플리케이션에서는 커넥션이 모자를 수 있음 --> 이는 장애로 이어짐.
+
+    2. OSIV False 인 경우 :
+        **** OSIV 가 꺼져있으면 Transaction 이 끝나는 시점에 DB 커넥션을 반납하고 Persistence Context 가 사라짐.
+        --> 따라서 Controller 단에서 지연로딩으로 인한 Proxy 객체를 초기화시키면 No Session Exception 이 터짐.
+            그 이유는 Controller 조회한 결과로 반납된 엔티티는 준영속상태가 되기 때문임.
+        --> 결국, OSIV 를 끄면 모든 지연로딩을 Transaction 안에서 처리해야함.
+            따라서 지금까지 api 패키지의 Controller 단에서 작성한 Proxy 객체를 초기화시키는 코드를 Transaction 안으로 넣어야하는단점이 있음.
+            그리고, View Template 에서 지연로딩이 동작하지 않음. 결론적으로 Transaction 이 끝나기 전에 지연 로딩을 강제로 호출해 두어야 함.
+            (fetch join 으로 한번에 끌어오거나, Service 계층에서 지연로딩을 강제로 호출시켜놓는 방법이 있음)
+
+
+// 근본적이 해결방법. --> 커멘드와 쿼리 분리
+- 실무에서 OSIV 를 끈 상태로 복잡성을 관리하는 좋은 방법이 있는데 바로 Command와 Query를 분리하는 것임. https://en.wikipedia.org/wiki/Command–query_separation
+- 보통 비즈니스 로직은 특정 엔티티 몇 개를 등록하거나 수정하는 것이므로 성능이 크게 문제가 되지 않는다.
+- 그런데 복잡한 화면을 출력하기 위한 쿼리는 화면에 맞추어 성능을 최적화 하는 것이 중요하다. 하지만 그 복잡성에 비해 핵심 비즈니스에 큰 영향을 주는 것은 아니다.
+- 그래서 크고 복잡한 애플리케이션을 개발한다면, 이 둘의 관심사를 명확하게 분리하는 선택은 유지보수 관점에서 충분히 의미 있다.
+- 단순하게 설명해서 다음처럼 분리하는 것이다.
+    --> OrderService: 핵심 비즈니스 로직
+    --> OrderQueryService: 화면이나 API에 맞춘 서비스 (주로 읽기 전용 트랜잭션 사용)
+- 보통 서비스 계층에서 트랜잭션을 유지한다. 두 서비스 모두 트랜잭션을 유지하면서 지연 로딩을 사용할 수있다.
+> 참고: 필자는 고객 서비스의 실시간 API는 OSIV를 끄고, ADMIN 처럼 커넥션을 많이 사용하지 않는곳에서는 OSIV를 켠다.
+> 참고: OSIV에 관해 더 깊이 알고 싶으면 자바 ORM 표준 JPA 프로그래밍 13장 웹 애플리케이션과 영속성 관리를 참고하자.
